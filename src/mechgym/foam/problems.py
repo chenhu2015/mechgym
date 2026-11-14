@@ -21,8 +21,10 @@ from pathlib import Path
 
 import numpy as np
 
+from ..fea.audit import wall_error
 from ..fea.problems import FeaTask, _lin, analytic_value, make_circular_hole
 from . import case as case_mod
+from .audit import audit_case
 from . import reader as reader_mod
 from .reader import _strip_comments, patch_vectors
 
@@ -48,6 +50,12 @@ RULES = """**Modeling rules.**
   of the point (so the mesh must be reasonably fine around the opening). Make sure the solution has
   converged at the last time step. Keep the mesh under 200,000 cells; the run must finish within
   10 minutes.
+- The case must be the stated problem, and the grader checks this: in `0/D`, `internalField uniform
+  (0 0 0)`, an explicit `hole` entry with `type tractionDisplacement; traction uniform (0 0 0);
+  pressure uniform 0;`, and on other patches only `tractionDisplacement`, `symmetryPlane`,
+  `symmetry`, `empty`, `zeroGradient` or `fixedValue` with `value uniform (0 0 0)`; the stated `E`
+  and `nu` (within 0.5%) with `planeStress no`; `thermalStress no`. A case that breaks these rules
+  scores 0.
 """
 
 
@@ -180,6 +188,9 @@ def verify_t0_foam(spec: dict, meta: dict, answer: dict, app_dir: str | Path | N
     problems = check_case(case)
     if problems:
         return {**out, "reward": 0.0, "flags": ["case rejected"] + problems[:10]}
+    problems = audit_case(case, spec)
+    if problems:
+        return {**out, "reward": 0.0, "flags": ["model is not the stated problem"] + problems[:10]}
     res = run_case(case)
     out["run_status"] = res["status"]
     if res["status"] != "ok":
@@ -191,6 +202,12 @@ def verify_t0_foam(spec: dict, meta: dict, answer: dict, app_dir: str | Path | N
     c, d = res["C"][:, :2], res["D"][:, :2]
     r = np.hypot(c[:, 0], c[:, 1])
     th = np.degrees(np.arctan2(c[:, 1], c[:, 0]))
+    # Whole-wall check: radial displacement at every 'hole' face against the closed form.
+    w_exact = np.array([analytic_value(spec, "wall", float(ri), float(np.radians(ti))) for ri, ti in zip(r, th)])
+    w_err = wall_error(c, d, w_exact) if len(c) >= 2 else float("inf")
+    out["surface_error"] = w_err
+    if w_err > 0.03:
+        out["flags"].append("the displacement along the whole opening wall does not match")
     scores = []
     for name, tgt in meta["targets"].items():
         k = int(np.argmin(np.abs(th - tgt["theta"])))
@@ -205,9 +222,9 @@ def verify_t0_foam(spec: dict, meta: dict, answer: dict, app_dir: str | Path | N
         consistent = claimed is not None and abs(claimed - fe) <= 0.01 * abs(fe) + 1e-12
         if not consistent:
             out["flags"].append(f"{name}: reported value missing or differs from the model's response")
-        s = _lin(err) * (1.0 if consistent else 0.5)
-        out["quantities"][name] = {"fe": fe, "exact": exact, "rel_error": err, "claimed": claimed,
-                                   "face_theta_deg": float(th[k]), "score": s}
+        s = min(_lin(err), _lin(w_err)) * (1.0 if consistent else 0.5)
+        out["quantities"][name] = {"fe": fe, "exact": exact, "rel_error": err, "surface_error": w_err,
+                                   "claimed": claimed, "face_theta_deg": float(th[k]), "score": s}
         scores.append(s)
     out["reward"] = float(np.mean(scores)) if scores else 0.0
     return out

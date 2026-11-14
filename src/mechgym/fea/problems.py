@@ -25,6 +25,7 @@ from pathlib import Path
 import numpy as np
 
 from . import analytic
+from .audit import audit_opensees, wall_error, wall_nodes
 from .sandbox import record, replay
 
 # Relative error: full credit at <= 1%, none at >= 3%. A converged model of a closed-form problem
@@ -55,6 +56,12 @@ RULES = """**Modeling rules.**
   stated otherwise below), and
   reads the displacements of the nodes you name below. Numbers you compute outside the model do not
   count. Keep the model under 200,000 nodes; the script must finish within 10 minutes.
+- The model must be the stated problem, and the grader checks this: 2D plane-strain continuum
+  elements only (`quad`, `bbarQuad`, `enhancedQuad`, `SSPquad`, `tri31`; no element pressure or
+  body force), the stated material (constants within 0.5%), supports as `fix` or zero-valued `sp`,
+  and loads only where the statement applies them. Springs, trusses, other materials, `equalDOF`,
+  `rigidLink`, `eleLoad`, mesh-generation commands and nonzero prescribed displacements (other than
+  a stated settlement) are rejected, and the model then scores 0.
 """
 
 
@@ -277,7 +284,14 @@ def verify_t0(spec: dict, meta: dict, answer: dict, app_dir: str | Path | None =
         if not rec["calls"]:
             out.update(reward=0.0, flags=["script issued no OpenSeesPy calls"])
             return out
-        rep = replay(rec, [n for n, _ in q.values()], work)
+        problems = audit_opensees(rec["calls"], spec)
+        if problems:
+            out.update(reward=0.0, flags=["model is not the stated problem", *problems[:10]])
+            return out
+        # Every node on each graded surface is also read, so the whole surface is checked.
+        walls = {name: wall_nodes(rec["calls"], tgt["r"]) for name, tgt in targets.items()}
+        query = sorted({n for n, _ in q.values()} | {n for w in walls.values() for n in w})
+        rep = replay(rec, query, work)
     out["replay_status"] = rep.get("status")
     out["n_nodes"] = rep.get("n_nodes")
     if rep.get("status") != "ok":
@@ -315,12 +329,28 @@ def verify_t0(spec: dict, meta: dict, answer: dict, app_dir: str | Path | None =
         consistent = abs(claimed - fe) <= 0.01 * abs(fe) + 1e-12
         if not consistent:
             out["flags"].append(f"{name}: reported value differs from the model's response")
-        s = _lin(err) * (1.0 if consistent else 0.5)
+        w_err = _surface_error(spec, name, walls[name], rep["nodes"])
+        if w_err > ZERO_TOL:
+            out["flags"].append(f"{name}: the displacement along the whole surface does not match")
+        s = min(_lin(err), _lin(w_err)) * (1.0 if consistent else 0.5)
         out["quantities"][name] = {"node": node, "fe": fe, "exact": exact, "rel_error": err,
+                                   "surface_error": w_err, "surface_nodes": len(walls[name]),
                                    "claimed": claimed, "score": s}
         scores.append(s)
     out["reward"] = float(np.mean(scores)) if scores else 0.0
     return out
+
+
+def _surface_error(spec: dict, name: str, tags: list[int], nodes: dict) -> float:
+    """Relative L2 error of the radial displacement over all nodes of a graded surface."""
+    info = [nodes[str(t)] for t in tags if str(t) in nodes]
+    if len(info) < 2:
+        return float("inf")
+    xy = np.array([i["coord"][:2] for i in info], dtype=float)
+    uv = np.array([i["disp"][:2] for i in info], dtype=float)
+    exact = np.array([analytic_value(spec, name, float(np.hypot(x, y)), float(np.arctan2(y, x)))
+                      for x, y in xy])
+    return wall_error(xy, uv, exact)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -455,6 +485,10 @@ def verify_footing(spec: dict, meta: dict, answer: dict, app_dir) -> dict:
         out["script_status"] = rec["status"]
         if not rec["calls"]:
             out.update(reward=0.0, flags=["script issued no OpenSeesPy calls"])
+            return out
+        problems = audit_opensees(rec["calls"], spec, footing_nodes=nodes)
+        if problems:
+            out.update(reward=0.0, flags=["model is not the stated problem", *problems[:10]])
             return out
         rep = replay(rec, nodes, work, timeout=900.0,
                      mode={"type": "incremental", "steps": REPLAY_STEPS, "reaction_nodes": nodes, "dof": 2})

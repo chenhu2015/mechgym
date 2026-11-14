@@ -137,7 +137,11 @@ _n = _m.getNumberOfNodes()
 _c = list(map(float, _m.getCoordinates().getValues()))
 _dim = len(_c) // _n
 _json.dump({"components": list(_f.getComponents()), "values": [[float(x) for x in r] for r in _vals],
-            "coords": [_c[i * _dim:(i + 1) * _dim] for i in range(_n)]}, open(_OUT, "w"))
+            "coords": [_c[i * _dim:(i + 1) * _dim] for i in range(_n)],
+            "cells": [list(map(int, c)) for c in _m.getConnectivity()],
+            "cell_types": list(map(int, _m.getMedCellsTypes())),
+            "load_groups": {_g: list(map(int, _m.getNodesFromCells(_g))) for _g in _LOAD_GROUPS
+                            if _g in _m.getGroupsOfCells()}}, open(_OUT, "w"))
 FIN()
 '''
 
@@ -154,15 +158,17 @@ def _strip_fin(source: str) -> str:
     return "\n".join(out) + "\n"
 
 
-def run_deck(comm: Path, timeout: int = 600) -> dict:
-    """Run an accepted deck and return {"status", "coords", "values", "components"}."""
+def run_deck(comm: Path, timeout: int = 600, load_groups: list[str] | None = None) -> dict:
+    """Run an accepted deck and return {"status", "coords", "values", "components", "cells",
+    "cell_types", "load_groups"} (node indices of each named loaded cell group)."""
     run_aster = shutil.which("run_aster")
     if run_aster is None:
         return {"status": "run_aster not found (run inside the Code_Aster image)"}
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "grader.json"
         deck = Path(tmp) / "graded.comm"
-        deck.write_text(f"_OUT = {str(out)!r}\n" + _strip_fin(comm.read_text()) + EPILOGUE)
+        deck.write_text(f"_OUT = {str(out)!r}\n_LOAD_GROUPS = {list(load_groups or [])!r}\n"
+                        + _strip_fin(comm.read_text()) + EPILOGUE)
         try:
             proc = subprocess.run([run_aster, str(deck)], cwd=tmp, capture_output=True, text=True,
                                   timeout=timeout, env=dict(os.environ))

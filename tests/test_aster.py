@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from mechgym.aster.audit import audit_deck, check_load_groups
 from mechgym.aster.deck import check_deck
 from mechgym.aster.problems import make_aster_cylinder, make_aster_hole, verify_t0_aster
 
@@ -73,6 +74,59 @@ def test_whitelist_rejects_calc_champ_replacing_resu(snippet):
 def test_whitelist_calc_champ_alone_is_not_a_result():
     deck = "DEBUT()\nresu = CALC_CHAMP(reuse=resu, RESULTAT=resu)\nFIN()\n"
     assert any("no variable named resu" in p for p in check_deck(deck))
+
+
+# --- admissibility audit: the deck must be the stated problem ------------------------------------
+
+AUDIT_SPEC = {"problem": "thick-cylinder", "youngs_modulus": 1.0e6, "poisson_ratio": 0.3,
+              "inner_radius": 1.0, "outer_radius": 3.0}
+CLEAN = GOOD.replace(", **{}", "")
+
+
+def test_audit_accepts_clean_deck():
+    problems, groups = audit_deck(CLEAN, AUDIT_SPEC)
+    assert problems == [] and groups == ["INNER"]
+
+
+def test_audit_accepts_function_tractions():
+    deck = CLEAN.replace("FIN()", 'fx = FORMULE(NOM_PARA=("X", "Y"), VALE="-5.0*X")\n'
+                         'trac = AFFE_CHAR_MECA_F(MODELE=model, FORCE_CONTOUR=_F(GROUP_MA="OUTER", FX=fx))\nFIN()')
+    problems, groups = audit_deck(deck, AUDIT_SPEC)
+    assert problems == [] and groups == ["INNER", "OUTER"]
+
+
+@pytest.mark.parametrize("old, new, needle", [
+    # red-team exploit: the closed-form displacement imposed at the graded node
+    ('DY=0.0)', 'DY=0.0), _F(GROUP_NO="INNERPT", DX=4.07e-4)', "imposed DX must be 0"),
+    ('MODELISATION="D_PLAN"', 'MODELISATION="DIS_T"', "D_PLAN"),
+    ("E=1.0e6", "E=1.5e6", "E and NU"),
+    ("E=1.0e6", "E=e_val", "numeric constants"),
+    ("ELAS=_F(E=1.0e6, NU=0.3)", "ELAS=_F(E=1.0e6, NU=0.3), THER=_F(LAMBDA=1.0)", "only define ELAS"),
+    ('PRES_REP=_F(GROUP_MA="INNER"', 'FORCE_NODALE=_F(GROUP_NO="INNERPT", FX=1.0), PRES_REP=_F(GROUP_MA="INNER"',
+     "FORCE_NODALE"),
+    ('PRES_REP=_F(GROUP_MA="INNER"', 'PRES_REP=_F(TOUT="OUI"', "GROUP_MA"),
+    ('PRES_REP=_F(GROUP_MA="INNER"', 'PRES_REP=_F(GROUP_MA=groups[0]', "string literals"),
+    ("FIN()", "c = AFFE_CARA_ELEM(MODELE=model)\nFIN()", "AFFE_CARA_ELEM"),
+    ("FIN()", 'f = AFFE_CHAR_MECA_F(MODELE=model, DDL_IMPO=_F(GROUP_NO="INNERPT", DX=fx))\nFIN()', "DDL_IMPO"),
+])
+def test_audit_rejects_injected_answers(old, new, needle):
+    deck = CLEAN.replace(old, new)
+    assert deck != CLEAN
+    problems, _ = audit_deck(deck, AUDIT_SPEC)
+    assert problems and any(needle in p for p in problems), problems
+
+
+def test_load_groups_must_be_on_the_loaded_boundary():
+    # 2 x 2 quads on 1 <= x <= 2, 0 <= y <= 1; node 4 at (1.5, 0.5) is interior, node 0 on r = a
+    res = {"coords": [[x, y] for y in (0.0, 0.5, 1.0) for x in (1.0, 1.5, 2.0)],
+           "cells": [[0, 1, 4, 3], [1, 2, 5, 4], [3, 4, 7, 6], [4, 5, 8, 7]], "cell_types": [204] * 4,
+           "load_groups": {"INSIDE": [4]}}
+    spec = {"problem": "circular-hole", "hole_radius": 1.0}
+    assert any("inside the mesh" in p for p in check_load_groups(spec, res))
+    res["load_groups"] = {"WALL": [0]}
+    assert any("traction-free" in p for p in check_load_groups(spec, res))
+    res["load_groups"] = {"EDGE": [2, 5, 8]}
+    assert check_load_groups(spec, res) == []
 
 
 def test_whitelist_requires_resu():

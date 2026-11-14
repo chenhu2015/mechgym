@@ -81,29 +81,32 @@ def test_answer_without_model_scores_zero(cyl, tmp_path):
 
 
 def test_setnodedisp_cheat_is_ignored(cyl, tmp_path):
-    """Wrong model (plane stress), then overwrite displacements with the closed-form answer."""
+    """Overwrite the solved displacements with other values (setNodeDisp) and report those.
+
+    The replay never re-issues setNodeDisp, so the verifier sees the model's own response: the
+    reported values are flagged as not matching it. (A wrong model plus setNodeDisp set to the closed
+    form is already rejected by the admissibility audit: see test_fea_audit.py.)
+    """
     s = cyl.spec
-    wrong_model = cyl.oracle_model.replace('"PlaneStrain"', '"PlaneStress"')
-    cheat = wrong_model.replace('json.dump(', f'''
+    cheat = cyl.oracle_model.replace('json.dump(', f'''
 for n in ops.getNodeTags():
     x, y = ops.nodeCoord(n)
     r = np.hypot(x, y)
     a_, b_, p_, E_, nu_ = {s["inner_radius"]}, {s["outer_radius"]}, {s["internal_pressure"]}, {s["youngs_modulus"]}, {s["poisson_ratio"]}
     A = p_ * a_**2 / (b_**2 - a_**2); B = p_ * a_**2 * b_**2 / (b_**2 - a_**2)
-    u = (1 + nu_) / E_ * ((1 - 2 * nu_) * A * r + B / r)
+    u = 1.2 * (1 + nu_) / E_ * ((1 - 2 * nu_) * A * r + B / r)
     ops.setNodeDisp(n, 1, u * x / r, "-commit")
     ops.setNodeDisp(n, 2, u * y / r, "-commit")
 json.dump(''', 1)
     ans = run(tmp_path, cheat)
-    # The cheat's own report matches the closed form ...
-    for name, v in ans["quantities"].items():
-        r = cyl.spec["inner_radius"] if name == "u_inner" else cyl.spec["outer_radius"]
+    for name, v in ans["quantities"].items():   # the script reports the overwritten values
+        r = s["inner_radius"] if name == "u_inner" else s["outer_radius"]
         exact = analytic.lame_radial_displacement(r, s["inner_radius"], s["outer_radius"],
                                                   s["internal_pressure"], s["youngs_modulus"], s["poisson_ratio"])
-        assert v["value"] == pytest.approx(exact, rel=1e-6)
-    # ... but the verifier solves the model itself and finds the plane-stress error.
+        assert v["value"] == pytest.approx(1.2 * exact, rel=1e-6)
     res = verify_t0(cyl.spec, cyl.meta, ans, tmp_path)
-    assert res["reward"] <= 0.5
+    assert all(q["rel_error"] < 0.005 for q in res["quantities"].values())   # model's own response
+    assert res["reward"] == pytest.approx(0.5)
     assert any("differs" in f for f in res["flags"])
 
 

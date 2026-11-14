@@ -14,7 +14,9 @@ from pathlib import Path
 
 import numpy as np
 
+from ..fea.audit import wall_error
 from ..fea.problems import FeaTask, _lin, analytic_value, make_circular_hole, make_thick_cylinder
+from .audit import audit_deck, check_load_groups
 from .deck import check_deck, run_deck
 
 MAX_NODES = 200_000
@@ -36,6 +38,13 @@ RULES = """**Modeling rules.**
   loops and `_F`; no imports and no attribute access. Commands that create fields or results
   directly (`CREA_CHAMP`, `CREA_RESU`, `LIRE_RESU`, ...) are rejected. Keep the mesh under 200,000
   nodes; the run must finish within 10 minutes.
+- The model must be the stated problem, and the grader checks this: `MODELISATION="D_PLAN"` only;
+  `DEFI_MATERIAU` with `ELAS` only, `E` and `NU` as numeric constants equal to the stated values
+  (within 0.5%); in `AFFE_CHAR_MECA` only `DDL_IMPO` / `FACE_IMPO` with all values 0 (supports and
+  symmetry) and `PRES_REP` / `FORCE_CONTOUR` on cell groups named by string literals in `GROUP_MA`,
+  lying on the boundary where the statement applies the load (`AFFE_CHAR_CINE` only with zero
+  `MECA_IMPO`; `AFFE_CHAR_MECA_F` only for such loads). `AFFE_CARA_ELEM` is rejected. A model that
+  breaks these rules scores 0.
 """
 
 
@@ -225,7 +234,10 @@ def verify_t0_aster(spec: dict, meta: dict, answer: dict, app_dir: str | Path | 
     problems = check_deck(comm.read_text(), app_dir="/app")
     if problems:
         return {**out, "reward": 0.0, "flags": ["command file rejected"] + problems[:10]}
-    res = run_deck(comm)
+    problems, load_groups = audit_deck(comm.read_text(), spec)
+    if problems:
+        return {**out, "reward": 0.0, "flags": ["model is not the stated problem"] + problems[:10]}
+    res = run_deck(comm, load_groups=load_groups)
     out["run_status"] = res["status"]
     if res["status"] != "ok":
         return {**out, "reward": 0.0, "flags": [f"model could not be solved: {res['status']}"],
@@ -239,6 +251,11 @@ def verify_t0_aster(spec: dict, meta: dict, answer: dict, app_dir: str | Path | 
     out["n_nodes"] = len(coords)
     if len(coords) > MAX_NODES:
         return {**out, "reward": 0.0, "flags": ["mesh exceeds the node limit"]}
+    missing = sorted(set(load_groups) - set(res.get("load_groups", {})))
+    problems = [f"loaded group {g} is not a cell group of the mesh" for g in missing]
+    problems += check_load_groups(spec, res)
+    if problems:
+        return {**out, "reward": 0.0, "flags": ["model is not the stated problem"] + problems[:10]}
 
     scores = []
     for name, tgt in meta["targets"].items():
@@ -259,8 +276,15 @@ def verify_t0_aster(spec: dict, meta: dict, answer: dict, app_dir: str | Path | 
         consistent = claimed is not None and abs(claimed - fe) <= 0.01 * abs(fe) + 1e-12
         if not consistent:
             out["flags"].append(f"{name}: reported value missing or differs from the model's response")
-        s = _lin(err) * (1.0 if consistent else 0.5)
-        out["quantities"][name] = {"fe": fe, "exact": exact, "rel_error": err, "claimed": claimed, "score": s}
+        on = np.abs(np.hypot(coords[:, 0], coords[:, 1]) - tgt["r"]) <= 0.005 * tgt["r"]
+        w_exact = np.array([analytic_value(spec, name, float(np.hypot(x_, y_)), float(np.arctan2(y_, x_)))
+                            for x_, y_ in coords[on]])
+        w_err = wall_error(coords[on], disp[on], w_exact) if on.sum() >= 2 else float("inf")
+        if w_err > 0.03:
+            out["flags"].append(f"{name}: the displacement along the whole surface does not match")
+        s = min(_lin(err), _lin(w_err)) * (1.0 if consistent else 0.5)
+        out["quantities"][name] = {"fe": fe, "exact": exact, "rel_error": err, "surface_error": w_err,
+                                   "surface_nodes": int(on.sum()), "claimed": claimed, "score": s}
         scores.append(s)
     out["reward"] = float(np.mean(scores)) if scores else 0.0
     return out

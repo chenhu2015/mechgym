@@ -100,9 +100,11 @@ ENV_NOTES = {
 T0_GRADING = """
 
 **Grading.** For each requested quantity, the grader's re-run of your model is compared with the
-exact solution: full credit within 1% relative error, none beyond 3%, linear in between. A
-quantity's credit is halved if the value you report differs from the re-run by more than 1%. The
-score is the mean over the quantities.
+exact solution: full credit within 1% relative error, none beyond 3%, linear in between. The same
+scale is applied to the radial displacement along the whole surface the point lies on (relative L2
+error over all mesh points of that surface), and the quantity gets the lower of the two. Its credit
+is halved if the value you report differs from the re-run by more than 1%. The score is the mean
+over the quantities. A model that is not the stated problem (see the modeling rules) scores 0.
 """
 
 FOOTING_GRADING = """

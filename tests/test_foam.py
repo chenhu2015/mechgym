@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from mechgym.foam.audit import audit_case
 from mechgym.foam.case import write_kirsch_case
 from mechgym.foam.problems import check_case, make_foam_hole, run_case, verify_t0_foam
 from mechgym.foam.reader import patch_vectors
@@ -150,4 +151,42 @@ def test_renamed_patch_scores_zero(tmp_path, task):
         text = (case / rel).read_text()
         (case / rel).write_text(text.replace("hole", "opening"))
     r = verify_t0_foam(task.spec, task.meta, {"quantities": {"u_r_theta0": 0.0, "u_r_theta90": 0.0}}, tmp_path)
-    assert r["reward"] == 0.0 and "hole" in r["flags"][0]
+    assert r["reward"] == 0.0 and any("hole" in f for f in r["flags"])
+
+
+# --- admissibility audit (no OpenFOAM needed): the case must be the stated problem ------------
+
+
+def test_audit_accepts_clean_case(tmp_path, task):
+    assert audit_case(write(tmp_path, task), task.spec) == []
+
+
+def _replace_patch(case, patch, new_body):
+    text = (case / "0/D").read_text()
+    i = text.index(patch, text.index("boundaryField"))
+    j = text.index("}", i)
+    (case / "0/D").write_text(text[:i] + f"{patch} {{ {new_body} " + text[j:])
+
+
+@pytest.mark.parametrize("edit, needle", [
+    # red-team exploit: the closed-form wall displacement imposed as a Dirichlet condition
+    (lambda c: _replace_patch(c, "hole", "type fixedValue; value nonuniform List<vector> 2((1 0 0) (0 1 0));"),
+     "traction-free"),
+    (lambda c: _replace_patch(c, "hole", "type tractionDisplacement; traction uniform (5 0 0); "
+                                         "pressure uniform 0; value uniform (0 0 0);"), "traction-free"),
+    # seeding the solution as the initial field
+    (lambda c: (c / "0/D").write_text((c / "0/D").read_text().replace(
+        "internalField uniform (0 0 0);", "internalField nonuniform List<vector> 1((1 2 0));")), "internalField"),
+    (lambda c: _replace_patch(c, "right", "type fixedValue; value uniform (0.001 0 0);"), "fixedValue"),
+    (lambda c: _replace_patch(c, "right", "type fixedGradient; gradient uniform (1 0 0);"), "not allowed"),
+    (lambda c: (c / "constant/mechanicalProperties").write_text(
+        (c / "constant/mechanicalProperties").read_text().replace("value 0.", "value 0.4", 1)), "E and nu"),
+    (lambda c: (c / "constant/thermalProperties").write_text(
+        (c / "constant/thermalProperties").read_text().replace("thermalStress no", "thermalStress yes")),
+     "thermalStress"),
+])
+def test_audit_rejects_injected_answers(tmp_path, task, edit, needle):
+    case = write(tmp_path, task)
+    edit(case)
+    problems = audit_case(case, task.spec)
+    assert problems and any(needle in p for p in problems), problems
