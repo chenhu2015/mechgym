@@ -11,8 +11,11 @@ a node tie. This audit rejects such models. It allows what a model of the stated
   ``J2Plasticity`` with the stated stiffness and strength and (nearly) no hardening, optionally
   through a ``PlaneStrain`` wrapper;
 - supports (``fix``, and ``sp`` with value 0);
-- nodal loads only on the loaded boundary (elastic problems), or prescribed settlements only on
-  the footing nodes (footing).
+- nodal loads only on the loaded boundary (elastic problems), statically equivalent to the stated
+  traction (see :mod:`mechgym.loadcheck`), or prescribed settlements only on the footing nodes
+  (footing);
+- unit thickness, and load patterns and time series without scale factors (a thickness or load
+  factor is a calibration knob: red-team agents used both to tune a coarse model to the answer).
 
 Everything else (uniaxial materials, other elements, ``equalDOF``, ``rigidLink``, ``eleLoad``,
 nonzero ``sp`` elsewhere, mesh-generation commands whose elements cannot be checked) is rejected.
@@ -25,12 +28,12 @@ from collections import Counter
 
 import numpy as np
 
+from .. import loadcheck
 from .sandbox import DEFINE
 
 REL_TOL = 0.005            # material constants must match the statement within 0.5%
 GEOM_TOL = 0.005           # a node is "on" a circle of radius R if |r - R| <= 0.5% R
 MAX_HARDENING = 1e-3       # footing: hardening modulus at most 1e-3 G ("perfectly plastic")
-LOAD_ANGLE_DEG = 2.0       # cylinder: nodal loads must be radial within 2 degrees
 
 # element name -> (number of nodes, index of matTag, index of type string or None,
 #                  indices of arguments that must be zero if present)
@@ -41,6 +44,8 @@ ELEMENTS = {
     "SSPquad":      (4, 5, 6, (8, 9)),             # tag n1-n4 mat type thick [b1 b2]
     "tri31":        (3, 6, 5, (7, 9, 10)),         # tag n1-n3 thick type mat [pressure rho b1 b2]
 }
+# index of the thickness argument (must be 1: loads and reactions are per unit length)
+THICKNESS = {"quad": 5, "enhancedQuad": 5, "bbarQuad": 5, "SSPquad": 7, "tri31": 4}
 # rho (density) creates no load in a static analysis, so it is not checked.
 ALLOWED = {"wipe", "model", "node", "fix", "fixX", "fixY", "nDMaterial", "element", "timeSeries",
            "pattern", "load", "sp", "mass"}
@@ -79,6 +84,12 @@ def audit_opensees(calls: list, spec: dict, footing_nodes: list[int] | None = No
             loads.append((int(args[0]), [float(v) for v in args[1:3]]))
         elif name == "sp":
             sps.append((int(args[0]), int(args[1]), float(args[2])))
+        elif name == "timeSeries":
+            if str(args[0]) not in ("Linear", "Constant") or not _unit_factor(args[2:], "-factor"):
+                problems.append("time series must be Linear or Constant with no scale factor")
+        elif name == "pattern":
+            if str(args[0]) != "Plain" or not _unit_factor(args[3:], "-fact"):
+                problems.append("load patterns must be Plain with no scale factor")
 
     # --- materials -----------------------------------------------------------------------------
     def material_ok(tag: int, depth: int = 0) -> str | None:
@@ -124,6 +135,13 @@ def audit_opensees(calls: list, spec: dict, footing_nodes: list[int] | None = No
         except (IndexError, TypeError, ValueError):
             problems.append(f"{etype} element {a[0]}: cannot read its material")
             continue
+        it = THICKNESS[etype]
+        try:
+            thick_ok = it < len(a) and abs(float(a[it]) - 1.0) <= 1e-9
+        except (TypeError, ValueError):
+            thick_ok = False
+        if not thick_ok:
+            problems.append(f"{etype} element {a[0]}: thickness must be 1 (unit thickness)")
         if itype is not None and str(a[itype]) != "PlaneStrain":
             problems.append(f"{etype} element {a[0]}: must be PlaneStrain")
         if any(i < len(a) and float(a[i]) != 0.0 for i in izero):
@@ -163,11 +181,8 @@ def audit_opensees(calls: list, spec: dict, footing_nodes: list[int] | None = No
             if not _close(r, a_in, GEOM_TOL) or node not in boundary:
                 problems.append(f"load at node {node} is not on the inner (pressurized) surface")
                 break
-            fr = (f[0] * x + f[1] * y) / r
-            if math.hypot(*f) > 0 and (fr <= 0 or math.degrees(math.acos(min(1.0, fr / math.hypot(*f))))
-                                       > LOAD_ANGLE_DEG):
-                problems.append(f"load at node {node} is not an outward radial pressure load")
-                break
+            # direction and magnitude: checked by the static-equivalence test below (consistent
+            # loads at the ends of a coarse arc are legitimately off-radial by half a segment)
     elif kind == "circular-hole":
         a_h = spec["hole_radius"]
         for node, f in loads:
@@ -178,11 +193,37 @@ def audit_opensees(calls: list, spec: dict, footing_nodes: list[int] | None = No
                 problems.append(f"load at node {node} is not on the outer (loaded) boundary")
                 break
 
+    if kind in ("thick-cylinder", "circular-hole") and not problems:
+        problems += _load_equivalence(nodes, elems, loads, spec)
+
     stray = sorted(n for n, _ in loads if n not in connected) + \
         sorted(n for n, _, v in sps if v != 0.0 and n not in connected)
     if stray:
         problems.append(f"loads or settlements on nodes outside the mesh: {stray[:5]}")
     return list(dict.fromkeys(problems))
+
+
+def _unit_factor(extra: list, flag: str) -> bool:
+    """Extra time-series/pattern arguments are acceptable only if absent or ``flag 1.0``."""
+    if not extra:
+        return True
+    try:
+        return len(extra) == 2 and str(extra[0]) == flag and float(extra[1]) == 1.0
+    except (TypeError, ValueError):
+        return False
+
+
+def _load_equivalence(nodes: dict, elems: list, loads: list, spec: dict) -> list[str]:
+    cells, corners = [], []
+    for etype, a in elems:
+        nn = ELEMENTS[etype][0]
+        cells.append([int(v) for v in a[1:1 + nn]])
+        corners.append(nn)
+    total: dict[int, np.ndarray] = {}
+    for node, f in loads:
+        total[node] = total.get(node, np.zeros(2)) + np.asarray(f, float)
+    res = loadcheck.check_nodal(nodes, cells, corners, total, spec, GEOM_TOL)
+    return [] if res["ok"] else [loadcheck.message(spec["problem"], res)]
 
 
 def wall_nodes(calls: list, radius: float, connected_only: bool = True) -> list[int]:

@@ -24,7 +24,9 @@ import numpy as np
 from ..fea.audit import wall_error
 from ..fea.problems import FeaTask, _lin, analytic_value, make_circular_hole
 from . import case as case_mod
+from .. import loadcheck
 from .audit import audit_case
+from .mesh import check_case_loads
 from . import reader as reader_mod
 from .reader import _strip_comments, patch_vectors
 
@@ -54,8 +56,10 @@ RULES = """**Modeling rules.**
   (0 0 0)`, an explicit `hole` entry with `type tractionDisplacement; traction uniform (0 0 0);
   pressure uniform 0;`, and on other patches only `tractionDisplacement`, `symmetryPlane`,
   `symmetry`, `empty`, `zeroGradient` or `fixedValue` with `value uniform (0 0 0)`; the stated `E`
-  and `nu` (within 0.5%) with `planeStress no`; `thermalStress no`. A case that breaks these rules
-  scores 0.
+  and `nu` (within 0.5%) with `planeStress no`; `thermalStress no`. The boundary loads must be the
+  stated far-field stress: on every patch other than `hole` and symmetry/empty patches, the grader
+  checks that the resultant and first moments of the applied tractions match those of the stated
+  stress within 0.5%. A case that breaks these rules scores 0.
 """
 
 
@@ -142,7 +146,7 @@ def check_case(case: Path) -> list[str]:
     return problems
 
 
-def run_case(case: Path, timeout: int = 600) -> dict:
+def run_case(case: Path, timeout: int = 600, spec: dict | None = None) -> dict:
     """Run blockMesh, solidDisplacementFoam and writeCellCentres on a copy of the case."""
     bashrc = Path("/usr/lib/openfoam/openfoam2412/etc/bashrc")
     if not bashrc.exists():
@@ -153,7 +157,10 @@ def run_case(case: Path, timeout: int = 600) -> dict:
             if (case / rel).exists():
                 (work / rel).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(case / rel, work / rel)
-        steps = ["blockMesh", "solidDisplacementFoam", "postProcess -func writeCellCentres -latestTime"]
+        # ASCII output so the verifier can read the mesh and boundary loads (mesh.py)
+        steps = ["foamDictionary system/controlDict -entry writeFormat -set ascii",
+                 "foamDictionary system/controlDict -entry writeCompression -set off",
+                 "blockMesh", "solidDisplacementFoam", "postProcess -func writeCellCentres -latestTime"]
         for cmd in steps:
             log = work / f"log.{cmd.split()[0]}"
             try:
@@ -175,7 +182,11 @@ def run_case(case: Path, timeout: int = 600) -> dict:
             c = patch_vectors(last / "C", "hole", n_expected=len(d))
         except (KeyError, ValueError, OSError) as e:
             return {"status": f"cannot read D on patch 'hole': {e}"}
-        return {"status": "ok", "n_cells": n_cells, "time": last.name, "D": d, "C": c}
+        try:
+            loads = check_case_loads(work, last, spec) if spec is not None else None
+        except (KeyError, ValueError, OSError, IndexError, TypeError) as e:
+            loads = {"ok": False, "error": f"cannot read the boundary loads: {e}"}
+        return {"status": "ok", "n_cells": n_cells, "time": last.name, "D": d, "C": c, "loads": loads}
 
 
 def verify_t0_foam(spec: dict, meta: dict, answer: dict, app_dir: str | Path | None = None) -> dict:
@@ -191,7 +202,7 @@ def verify_t0_foam(spec: dict, meta: dict, answer: dict, app_dir: str | Path | N
     problems = audit_case(case, spec)
     if problems:
         return {**out, "reward": 0.0, "flags": ["model is not the stated problem"] + problems[:10]}
-    res = run_case(case)
+    res = run_case(case, spec=spec)
     out["run_status"] = res["status"]
     if res["status"] != "ok":
         return {**out, "reward": 0.0, "flags": [f"case could not be run: {res['status']}"],
@@ -199,6 +210,11 @@ def verify_t0_foam(spec: dict, meta: dict, answer: dict, app_dir: str | Path | N
     out.update(n_cells=res["n_cells"], time=res["time"])
     if res["n_cells"] is None or res["n_cells"] > MAX_CELLS:
         return {**out, "reward": 0.0, "flags": ["mesh exceeds the cell limit"]}
+    loads = res.get("loads") or {}
+    out["load_check"] = {k: v for k, v in loads.items() if k != "ok"}
+    if not loads.get("ok"):
+        msg = loads.get("error") or loadcheck.message(spec["problem"], loads)
+        return {**out, "reward": 0.0, "flags": ["model is not the stated problem", msg]}
     c, d = res["C"][:, :2], res["D"][:, :2]
     r = np.hypot(c[:, 0], c[:, 1])
     th = np.degrees(np.arctan2(c[:, 1], c[:, 0]))

@@ -49,8 +49,9 @@ class FeaTask:
 RULES = """**Modeling rules.**
 - Build the model with **OpenSeesPy** (`import openseespy.opensees as ops`; installed in the
   environment) in a script `/app/model.py`. Plane strain, consistent units (kN, m, kPa).
-- Apply all loads in load patterns with a `Linear` (or `Constant`) time series so that the full load
-  acts at pseudo-time 1. Define the model fully in the script; you may run any analysis you like.
+- Apply all loads in `Plain` load patterns with a `Linear` (or `Constant`) time series and no scale
+  factors, so that the full load acts at pseudo-time 1. Use unit thickness (1.0) for all elements.
+  Define the model fully in the script; you may run any analysis you like.
 - The grader re-runs your script, keeps only the **model definition** (nodes, elements, materials,
   boundary conditions, constraints, loads), solves it with its own analysis (linear static unless
   stated otherwise below), and
@@ -59,7 +60,9 @@ RULES = """**Modeling rules.**
 - The model must be the stated problem, and the grader checks this: 2D plane-strain continuum
   elements only (`quad`, `bbarQuad`, `enhancedQuad`, `SSPquad`, `tri31`; no element pressure or
   body force), the stated material (constants within 0.5%), supports as `fix` or zero-valued `sp`,
-  and loads only where the statement applies them. Springs, trusses, other materials, `equalDOF`,
+  and loads only where the statement applies them. Nodal loads must be statically equivalent to the
+  stated boundary traction on your mesh: their resultant and first moments must match the
+  consistent nodal loads of that traction within 0.5%. Springs, trusses, other materials, `equalDOF`,
   `rigidLink`, `eleLoad`, mesh-generation commands and nonzero prescribed displacements (other than
   a stated settlement) are rejected, and the model then scores 0.
 """

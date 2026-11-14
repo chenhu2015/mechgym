@@ -16,7 +16,7 @@ import numpy as np
 
 from ..fea.audit import wall_error
 from ..fea.problems import FeaTask, _lin, analytic_value, make_circular_hole, make_thick_cylinder
-from .audit import audit_deck, check_load_groups
+from .audit import audit_deck, check_applied_loads, check_load_groups
 from .deck import check_deck, run_deck
 
 MAX_NODES = 200_000
@@ -43,8 +43,10 @@ RULES = """**Modeling rules.**
   (within 0.5%); in `AFFE_CHAR_MECA` only `DDL_IMPO` / `FACE_IMPO` with all values 0 (supports and
   symmetry) and `PRES_REP` / `FORCE_CONTOUR` on cell groups named by string literals in `GROUP_MA`,
   lying on the boundary where the statement applies the load (`AFFE_CHAR_CINE` only with zero
-  `MECA_IMPO`; `AFFE_CHAR_MECA_F` only for such loads). `AFFE_CARA_ELEM` is rejected. A model that
-  breaks these rules scores 0.
+  `MECA_IMPO`; `AFFE_CHAR_MECA_F` only for such loads). `AFFE_CARA_ELEM` is rejected. The loads
+  must be the stated traction: the grader assembles your load vector and checks that its resultant
+  and first moments match the stated traction on your mesh's loaded boundary within 0.5%. A model
+  that breaks these rules scores 0.
 """
 
 
@@ -254,6 +256,8 @@ def verify_t0_aster(spec: dict, meta: dict, answer: dict, app_dir: str | Path | 
     missing = sorted(set(load_groups) - set(res.get("load_groups", {})))
     problems = [f"loaded group {g} is not a cell group of the mesh" for g in missing]
     problems += check_load_groups(spec, res)
+    if not problems:
+        problems += check_applied_loads(spec, res)
     if problems:
         return {**out, "reward": 0.0, "flags": ["model is not the stated problem"] + problems[:10]}
 

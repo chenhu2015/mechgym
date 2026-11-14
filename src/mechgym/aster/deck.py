@@ -136,7 +136,17 @@ _m = resu.getMesh()
 _n = _m.getNumberOfNodes()
 _c = list(map(float, _m.getCoordinates().getValues()))
 _dim = len(_c) // _n
+# Applied nodal loads = internal nodal forces - reactions (REAC_NODA = FORC_NODA - loads).
+_applied = None
+try:
+    _rf = CALC_CHAMP(RESULTAT=resu, NUME_ORDRE=_last, FORCE=("FORC_NODA", "REAC_NODA"))
+    _fn, _ = _rf.getField("FORC_NODA", _last).toSimpleFieldOnNodes().getValues()
+    _rn, _ = _rf.getField("REAC_NODA", _last).toSimpleFieldOnNodes().getValues()
+    _applied = [[float(a) - float(b) for a, b in zip(r1[:2], r2[:2])] for r1, r2 in zip(_fn, _rn)]
+except Exception as _e:   # reported as "applied loads could not be evaluated"
+    _applied = None
 _json.dump({"components": list(_f.getComponents()), "values": [[float(x) for x in r] for r in _vals],
+            "applied": _applied,
             "coords": [_c[i * _dim:(i + 1) * _dim] for i in range(_n)],
             "cells": [list(map(int, c)) for c in _m.getConnectivity()],
             "cell_types": list(map(int, _m.getMedCellsTypes())),

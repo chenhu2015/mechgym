@@ -14,7 +14,9 @@ somewhere other than where the statement applies them. Static checks (on the syn
   only zero ``MECA_IMPO``; ``AFFE_CHAR_MECA_F`` only for those loads; ``AFFE_CARA_ELEM`` is rejected.
 
 :func:`check_load_groups` then checks, on the mesh the deck actually read, that the loaded groups
-lie where the statement applies loads (see :mod:`mechgym.aster.problems`).
+lie where the statement applies loads, and :func:`check_applied_loads` that the assembled load
+vector is statically equivalent to the stated traction (:mod:`mechgym.loadcheck`); red-team agents
+otherwise applied the exact Kirsch traction on a small domain through a FORMULE.
 """
 
 from __future__ import annotations
@@ -206,3 +208,23 @@ def check_load_groups(spec: dict, res: dict) -> list[str]:
                 problems.append(f"loaded group {group} touches the traction-free opening wall")
                 break
     return problems
+
+
+def check_applied_loads(spec: dict, res: dict) -> list[str]:
+    """The assembled load vector must be statically equivalent to the stated traction on the
+    loaded boundary of the deck's own mesh (see :mod:`mechgym.loadcheck`)."""
+    from .. import loadcheck
+
+    applied = res.get("applied")
+    if not applied:
+        return ["the applied loads could not be evaluated (FORC_NODA / REAC_NODA)"]
+    coords = {i: tuple(c[:2]) for i, c in enumerate(res["coords"])}
+    cells, corners = [], []
+    for cell, mtype in zip(res["cells"], res["cell_types"]):
+        k = MED_CORNERS.get(mtype)
+        if k is not None:
+            cells.append(list(cell))
+            corners.append(k)
+    loads = {i: f for i, f in enumerate(applied) if f[0] != 0.0 or f[1] != 0.0}
+    out = loadcheck.check_nodal(coords, cells, corners, loads, spec, GEOM_TOL)
+    return [] if out["ok"] else [loadcheck.message(spec["problem"], out)]
