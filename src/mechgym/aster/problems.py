@@ -35,7 +35,9 @@ RULES = """**Modeling rules.**
   `resu` at the mesh nodes located at the points listed below, so your mesh must have a node at
   each of those points. The command file may only use Code_Aster commands that define and solve
   the model (plus `IMPR_RESU`, `IMPR_TABLE`, `POST_RELEVE_T`, `CALC_CHAMP`), basic arithmetic,
-  loops and `_F`; no imports and no attribute access. Commands that create fields or results
+  loops and `_F`; no imports and no attribute access. A `FORMULE` expression (`VALE`) must be a
+  string literal; pass constants as keyword arguments, e.g.
+  `FORMULE(VALE="S*X/R", S=SIGXX, R=RR, NOM_PARA=("X", "Y"))`. Commands that create fields or results
   directly (`CREA_CHAMP`, `CREA_RESU`, `LIRE_RESU`, ...) are rejected. Keep the mesh under 200,000
   nodes; the run must finish within 10 minutes.
 - The model must be the stated problem, and the grader checks this: `MODELISATION="D_PLAN"` only;

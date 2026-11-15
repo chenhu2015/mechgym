@@ -115,7 +115,8 @@ def _check_formula(call: ast.Call) -> list[str]:
         if kw.arg != "VALE":
             continue
         if not (isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str)):
-            return [f"line {call.lineno}: FORMULE VALE must be a string literal"]
+            return [f"line {call.lineno}: FORMULE VALE must be a string literal "
+                    "(pass constants as keyword arguments)"]
         try:
             expr = ast.parse(kw.value.value, mode="eval")
         except SyntaxError:

@@ -23,7 +23,11 @@ from .spec import profile_from_spec
 STANDARD = (
     "Use Bishop's simplified method with circular slip surfaces. Pore pressure below the phreatic "
     "line is u = gamma_w * (z_w - z) with gamma_w = 9.81 kN/m3 (no pore pressure above it). "
-    "Ignore tension cracks and seismic loading. Slip surfaces may not pass below the model base."
+    "Ignore tension cracks and seismic loading. Slip surfaces may not pass below the model base. "
+    "The slip surface is the lower arc of the circle (below its centre); it is admissible only if "
+    "that arc enters and leaves the ground surface within the section, so a circle whose lower arc "
+    "ends below the ground (which would need a vertical or overhanging segment to daylight) is "
+    "rejected."
 )
 
 
