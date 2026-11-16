@@ -392,6 +392,18 @@ All of the following must fail, and they score below 1 on all six:
 FoS values from only 15 slices fall outside the 2% consistency check on 2 of 6 instances. The
 statement therefore asks for a factor of safety converged with respect to slicing.
 
+**T3 (seeds 0–2; `scripts/method_battery_t3.py`).** A back-analysis from one observed failure
+does not determine (c', φ') uniquely. The battery checks what that non-uniqueness costs, using
+pairs with φ' off the true value and c' chosen so that the observed surface has FoS = 1, with the
+drained FoS predicted from those parameters:
+
+- φ' within ±1.5° of the true value: 1.00 on every instance.
+- φ' off by ±3° (info): 0.94–1.00.
+- The laboratory peak strength (the trap the task sets): 0 on every instance.
+- A back-analysis that ignores the pore pressures at failure: 0–0.12.
+- The laboratory φ' with c' back-calculated (info), a common shortcut: 0.64–1.00, because the
+  laboratory φ' is 2–5° too high and the drained prediction suffers on some instances.
+
 **Knowledge gates in T1 (v0.2).** On the v0.1 generator, ignoring the water table changed the
 minimum FoS by a median of about 2.5%, and using the ordinary method of slices changed it by 1–9%.
 In 24 instances, many were therefore inside the 2% full-credit band, so the method mistakes went
