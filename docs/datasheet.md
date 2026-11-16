@@ -195,7 +195,10 @@ verified surface is more critical than the verifier's own search, it becomes the
 Hard constraints (any violation → 0): cut only, protected crest zone unchanged, same end points, not
 below the model base. Reward = feasible (critical FoS ≥ target) × min(1, reference excavation /
 agent excavation) × (1 if the claimed FoS matches the re-analysis within 3%, else 0.5). The reference
-excavation is the minimum single-plane regrade that meets the target; better designs are capped at 1.
+excavation is the minimum single-plane regrade that meets the target. Better designs, for example
+benched or curved ones, are capped at reward 1. The verifier also records the uncapped ratio
+`efficiency_uncapped` and a flag `beats_reference`, so that results can show designs that improve
+on the reference.
 
 ## T3 — back-analysis
 
@@ -350,6 +353,27 @@ models, a square plate and another domain size.
 
 The `FORMULE` variant is the form the statement now prescribes. One correct baseline model was
 rejected because it built the formula string with Python formatting.
+
+**OpenFOAM T0-F (seeds 0–2; `scripts/method_battery_foam.py`).** Here the reward assumes the agent
+reports what its own case gives; consistency is tested separately.
+
+| Variant | Expected | Rewards | Error |
+|---|---|---|---|
+| oracle (plate 80a, 8,000 iterations) | pass | 1.00 1.00 1.00 | 0.15 |
+| plate 60a | pass | 1.00 1.00 1.00 | 0.21 |
+| 12,000 iterations / density 2000 / binary output | pass | all 1.00 | 0.15 |
+| plate 40a | info | 1.00 1.00 1.00 | 0.40 |
+| 300 iterations | info | 1.00 1.00 1.00 | 0.06 |
+| plane stress | fail | 0 0 0 | – |
+| plate 10a | fail | 0.95 0.74 0.21 | ≥ 1.2 |
+| far-field stresses swapped | fail | 0 0 0 | – |
+
+Two of these results are worth noting:
+
+- The 300-iteration case was meant as an unconverged run. On this mesh, 300 iterations already
+  converge the wall displacement, so the iteration count is not a gate.
+- The 10a plate loses between 5% and 79% of the reward, depending on the stress ratio of the
+  instance.
 
 **T1 (Eval v0.2 generator, seeds 0–5).** All of the following must pass, and they score 1.0 on all
 six instances:

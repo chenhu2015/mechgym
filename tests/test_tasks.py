@@ -54,6 +54,11 @@ def test_t2_oracle_full_reward(t2):
     assert r["feasible"] and r["reward"] == pytest.approx(1.0)
 
 
+def test_t2_reports_uncapped_efficiency(t2):
+    r = verify_t2(t2.spec, t2.meta, t2.reference)
+    assert r["efficiency_uncapped"] == pytest.approx(1.0, rel=1e-6) and not r["beats_reference"]
+
+
 def test_t2_unchanged_is_infeasible(t2):
     r = verify_t2(t2.spec, t2.meta, {"surface": t2.spec["surface"], "fos": 1.4})
     assert r["reward"] == 0.0 and not r["feasible"]

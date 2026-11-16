@@ -345,10 +345,15 @@ def verify_t2(spec: dict, meta: dict, answer: dict) -> dict:
     consistent = abs(f_claim - f_v) / f_v <= 0.03
     if not consistent:
         out["flags"].append("claimed FoS does not match the re-analysis")
-    efficiency = min(1.0, meta["reference_area"] / area) if area > 0 else 0.0
+    # The reward caps efficiency at 1; the uncapped ratio is reported so that designs better than
+    # the reference (the best single-plane regrade) are visible in results.
+    ratio = meta["reference_area"] / area if area > 0 else (float("inf") if feasible else 0.0)
+    efficiency = min(1.0, ratio)
     reward = (1.0 if feasible else 0.0) * efficiency * (1.0 if consistent else 0.5)
     out.update(fos_verified=f_v, fos_claimed=f_claim, area=area, feasible=feasible,
-               efficiency=efficiency, consistent=consistent, reward=reward)
+               efficiency=efficiency, efficiency_uncapped=ratio,
+               beats_reference=bool(feasible and consistent and ratio > 1.0),
+               consistent=consistent, reward=reward)
     return out
 
 
