@@ -333,6 +333,24 @@ On the info rows the agent sees the same result in its own run:
 None of the passing variants trips the admissibility audit. This covers other element types, full
 models, a square plate and another domain size.
 
+**Code_Aster T0-A (seeds 0–5, 3 instances of each problem; `scripts/method_battery_aster.py`).**
+
+| Problem | Variant | Expected | Rewards | Error |
+|---|---|---|---|---|
+| both | oracle (QUAD4, quarter, MECA_STATIQUE) | pass | all 1.00 | ≤ 0.18 |
+| both | STAT_NON_LINE with `RELATION="ELAS"` | pass | all 1.00 | ≤ 0.18 |
+| both | coarser mesh (30 × 24) | pass | all 1.00 | ≤ 0.35 |
+| cylinder | TRIA3 (each quad split in two) | pass | 1.00 1.00 1.00 | 0.28 |
+| opening | far-field tractions through `AFFE_CHAR_MECA_F` and `FORMULE` with keyword constants | pass | 1.00 1.00 1.00 | 0.18 |
+| opening | TRIA3 at the quad density | info | 1.00 1.00 0.99 | 1.03 |
+| both | plane stress (`C_PLAN`) | fail | all 0 | – |
+| both | very coarse mesh (4 × 4) | fail | ≤ 0.20 | ≥ 3.4 |
+| cylinder | pressure sign reversed | fail | 0 0 0 | – |
+| opening | domain 5a / far-field stresses swapped | fail | all 0 | 6.1 / – |
+
+The `FORMULE` variant is the form the statement now prescribes. One correct baseline model was
+rejected because it built the formula string with Python formatting.
+
 **T1 (Eval v0.2 generator, seeds 0–5).** All of the following must pass, and they score 1.0 on all
 six instances:
 
