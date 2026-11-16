@@ -66,10 +66,7 @@ design file. The same tasks run as an eval (fixed set) or as RL environments (ge
   with an analytical or validated reference. Solvers are never installed on the host.
 - FEM for T4: Mohr–Coulomb / Drucker–Prager plasticity with strength reduction, in one of the codes above.
 
-## Milestones
+## Plan
 
-- **M1** Limit-equilibrium solver + validation suite against benchmark slopes — done
-- **M2** Procedural generator + T1 / T2 tasks packaged as Harbor tasks — done
-- **M3** Baseline evaluation of frontier and open models; failure-mode and hacking analysis
-- **M4** T3 back-analysis tasks — done
-- **M5** Small-scale GRPO run (optional) and a write-up page
+Stages, the task-horizon ladder (from single analyses to long-horizon projects and research tasks)
+and their status are in [`roadmap.md`](roadmap.md).

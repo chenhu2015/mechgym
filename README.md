@@ -11,7 +11,7 @@ agent computed itself.
 The first domain is **geotechnics** (slopes, openings, foundations). The task interface, sandboxing and
 verifier pattern are domain-independent, and further areas of solid and fluid mechanics are planned.
 
-Datasheet (rewards, validation, negative controls, limits): [`docs/datasheet.md`](docs/datasheet.md) · design: [`docs/design.md`](docs/design.md) · verifier validation: [`docs/validation.md`](docs/validation.md)
+Datasheet (rewards, validation, negative controls, limits): [`docs/datasheet.md`](docs/datasheet.md) · design: [`docs/design.md`](docs/design.md) · roadmap: [`docs/roadmap.md`](docs/roadmap.md) · verifier validation: [`docs/validation.md`](docs/validation.md)
 
 ## Task families
 
