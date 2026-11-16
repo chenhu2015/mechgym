@@ -63,7 +63,21 @@ against limit equilibrium.
 
 ### H4 — research tasks
 
-Research tasks still need an answer that can be checked. Candidate types:
+Research tasks still need an answer that can be checked. Four ways to get one, in order of how far
+they reach:
+
+1. **Checking is easier than solving.** The verifier can re-analyze any answer without knowing the
+   best one. T1 already works this way: a surface more critical than the verifier's own search
+   becomes the reference. Scores should be able to show an agent beating the reference instead of
+   capping it at 1 (T2 currently caps it).
+2. **The environment holds the truth.** A hidden model generates the data, so no human needs to
+   have solved the problem (T3, H3).
+3. **Physical consistency.** Equilibrium, conservation, convergence, the second law, and agreement
+   between independent methods can reject wrong answers without a reference.
+4. **Open-ended discovery.** A result that is new to everyone cannot be graded in advance. This
+   project does not claim to measure it.
+
+Candidate types:
 
 - **Calibration.** Fit a constitutive model to laboratory test curves generated from hidden
   parameters, then predict a test the agent has not seen.
@@ -75,6 +89,28 @@ Research tasks still need an answer that can be checked. Candidate types:
   amount. The verifier re-runs both methods.
 - **Verifier construction.** Write a verifier for a new problem. It is scored by whether it
   accepts correct submissions and rejects a hidden set of seeded wrong ones.
+
+**First H4 task (flagship): soil constitutive calibration and prediction.** The agent receives a
+laboratory programme generated from a hidden constitutive model (for example Modified Cam-Clay or a
+hardening-soil model) with realistic noise:
+
+- drained and undrained triaxial tests;
+- tests at several consolidation pressures and overconsolidation ratios;
+- oedometer tests.
+
+The agent identifies and calibrates a model and then predicts a boundary-value problem it has not
+seen, such as embankment settlement and excess pore pressure during and after construction. The
+grade is the prediction against the hidden model's own finite-element solution.
+
+The task contains deliberate confounds, for example:
+
+- rate effects that look like drainage effects;
+- sample disturbance that looks like a lower preconsolidation pressure.
+
+It is built at the scale of Terminal-Bench-Science tasks (several hours, expert-authored) and
+procedurally, so it serves both as an evaluation and as a family of training instances.
+Geomechanics is not covered by Terminal-Bench-Science v0.1, and its solid-mechanics calibration
+task (soft polymers) is the closest relative. This task should complement it, not duplicate it.
 
 ## Standards every release meets
 
@@ -90,15 +126,31 @@ Research tasks still need an answer that can be checked. Candidate types:
 - **Held-out suite.** Same composition as the public suite, drawn from private seeds, used to
   detect contamination.
 - **Pinned and reproducible.** Images pinned by digest, generators seeded, suites versioned.
+- **Method battery.** Each task type ships two sets of method variants, and the datasheet reports
+  the measured margin between them:
+  - plausible but wrong variants, each of which must fail. Examples are plane stress, too small a
+    domain, a locking element, an omitted pore pressure, and an uncorrected confound.
+  - legitimate alternative methods and ways of writing the same model, each of which must pass.
+    Examples are other element types, other meshes, quarter or full models, and equivalent input
+    syntax.
+
+  The baseline on Eval v0.1 found statement problems that a battery of the second kind would have
+  caught before release.
+- **Designed knowledge gates.** Where possible a task contains at least one effect that an
+  unaware method gets wrong without any visible sign in the data or the fit, such as volumetric
+  locking under near-incompressibility. A gate is documented, together with the evidence that the
+  wrong method fails it.
+- **Expert authorship.** Each task type records its author, the author's relevant experience, and
+  an estimate of expert time.
 
 ## Stages
 
 | Stage | Content | Exit criteria | Status |
 |---|---|---|---|
 | 1. Foundations | LE verifier and its validation; T0–T3; Harbor packaging; three solvers in containers; two red-team rounds; first baseline | Eval v0.1 with oracle 1.0, do-nothing 0, and a published baseline | done (2026-11-15) |
-| 2. Eval v0.2 | H1 tasks replace the saturated H0 ones; failures from v0.1 fixed in the task statements; second model family; human expert baseline on a subset; images pinned by digest; license | No task type above 0.9 mean for the strongest model tested; every failure classified | next |
+| 2. Eval v0.2 | H1 tasks replace the saturated H0 ones; failures from v0.1 fixed in the task statements; a method battery for every task type; T2 scores that can exceed the reference; second model family; human expert baseline on a subset; images pinned by digest; license | No task type above 0.9 mean for the strongest model tested; every failure classified; every battery variant on the expected side | next |
 | 3. Long horizon | T4 staged excavation; first H3 multi-stage project with released monitoring data | Oracle and do-nothing controls; baseline with trajectory review | planned |
-| 4. Research tasks | First H4 tasks (calibration, verifier construction) | As above, plus a check that no task can be solved without running analyses | planned |
+| 4. Research tasks | First H4 tasks: the soil calibration flagship, then verifier construction | As above, plus a check that no task can be solved without running analyses | planned |
 | 5. Training signal | Small RL run on generated instances; evaluation on the held-out suite | Improvement on held-out tasks that is not explained by reward hacking (checked by trajectory review) | planned |
 
 ## Open questions
@@ -109,7 +161,16 @@ Research tasks still need an answer that can be checked. Candidate types:
   Intermediate checks give a denser signal but can teach the agent to optimize the checkpoint.
 - **Compute budgets.** Whether to give agents a fixed solver-time budget. Real engineering has
   one, and it makes efficiency part of the task.
+- **Binary or continuous reward.** Terminal-Bench-Science grades each task pass or fail and keeps
+  continuous scores for analysis only. MechGym uses continuous rewards because they give a denser
+  training signal. A release could report both, with a stated pass threshold per task type.
+- **Contributing to Terminal-Bench-Science.** Whether to contribute the geomechanics flagship
+  there, alongside keeping its procedural family here.
 
 ## Changelog
 
 - 2026-11-15: first version, after the Sonnet 5 baseline on Eval v0.1.
+- 2026-11-15: after reviewing Terminal-Bench-Science v0.1, added method batteries, designed
+  knowledge gates and expert authorship to the release standards; the four ways of grading research
+  tasks; the soil-calibration flagship as the first H4 task; uncapped T2 scores; open questions on
+  binary rewards and contributing.
