@@ -29,7 +29,10 @@ class Site:
     faces_left: bool  # True if the slope face looks toward -x (crest on the right)
 
 
-def random_site(rng: np.random.Generator, water_prob: float = 0.5, max_layers: int = 3) -> Site:
+def random_site(rng: np.random.Generator, water_prob: float = 0.5, max_layers: int = 3,
+                water_depth: tuple[float, float] = (0.2, 0.8)) -> Site:
+    """``water_depth``: range of the phreatic surface's depth below the crest, as a fraction of the
+    slope height."""
     h = float(np.round(rng.uniform(6.0, 20.0), 1))
     beta = float(np.round(rng.uniform(26.0, 55.0), 1))
     z_toe = 10.0
@@ -64,7 +67,7 @@ def random_site(rng: np.random.Generator, water_prob: float = 0.5, max_layers: i
 
     water = None
     if rng.random() < water_prob:
-        d_crest = float(np.round(rng.uniform(0.2, 0.8) * h, 1))
+        d_crest = float(np.round(rng.uniform(*water_depth) * h, 1))
         z_w_crest = z_crest - d_crest
         # Phreatic line: flat under the crest, dropping to emerge at the toe.
         water = [(0.0, z_toe), (x_toe, z_toe), (x_crest + 0.5 * h, z_w_crest), (x_end, z_w_crest)]

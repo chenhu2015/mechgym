@@ -34,6 +34,17 @@ def test_t1_noncritical_surface_scores_low(t1):
     assert r["reward"] < 0.6
 
 
+def test_t1_knowledge_gates(t1):
+    """Ignoring the water table, or using the ordinary method of slices, must change the answer
+    by more than the full-credit tolerance."""
+    from mechgym.le import search_circular
+    from mechgym.spec import profile_from_spec
+    from mechgym.tasks import METHOD_GATE, WATER_GATE, t1_gates
+    res = search_circular(profile_from_spec(t1.spec), "bishop")
+    g = t1_gates(t1.spec, res)
+    assert g["water"] >= WATER_GATE and g["method"] >= METHOD_GATE
+
+
 def test_t1_malformed(t1):
     assert verify_t1(t1.spec, t1.meta, {"fos": "x"})["reward"] == 0.0
 

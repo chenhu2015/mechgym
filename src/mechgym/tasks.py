@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .generate import Site, random_site
-from .le import Circle, InvalidSurface, evaluate, search_circular
+from .le import Circle, InvalidSurface, evaluate, fellenius, make_slices, search_circular
 from .profile import Polyline
 from .spec import profile_from_spec
 
@@ -27,7 +27,11 @@ STANDARD = (
     "The slip surface is the lower arc of the circle (below its centre); it is admissible only if "
     "that arc enters and leaves the ground surface within the section, so a circle whose lower arc "
     "ends below the ground (which would need a vertical or overhanging segment to daylight) is "
-    "rejected."
+    "rejected. A surface is also rejected if any slice has m_alpha = cos(alpha) + sin(alpha) * "
+    "tan(phi') / F below 0.2 (a base too steep for Bishop's method; Whitman and Bailey, 1967). "
+    "Surfaces are re-analyzed with at least 60 slices whose boundaries include every breakpoint of "
+    "the ground, unit boundaries and phreatic surface; report a factor of safety that is converged "
+    "with respect to the slicing (a coarse slicing can be off by a few percent)."
 )
 
 
@@ -91,17 +95,44 @@ class Task:
     reference: dict = field(default_factory=dict)  # oracle answer
 
 
-def make_t1(seed: int, max_tries: int = 50) -> Task:
+#: Knowledge gates of T1 (v0.2): an instance is kept only if ignoring the phreatic surface raises
+#: the minimum FoS by at least WATER_GATE, and the ordinary method of slices on the critical circle
+#: differs from Bishop by at least METHOD_GATE (both beyond the 2% full-credit tolerance).
+WATER_GATE, METHOD_GATE = 0.06, 0.05
+
+
+def t1_gates(spec: dict, res) -> dict:
+    """How much ignoring the water, or using the ordinary method of slices, changes the answer."""
+    import copy
+    prof = profile_from_spec(spec)
+    dry = search_circular(profile_from_spec(dict(copy.deepcopy(spec), water_table=None)), "bishop").fos
+    fel = fellenius(prof, make_slices(prof, res.surface))
+    return {"water": dry / res.fos - 1.0, "method": abs(fel / res.fos - 1.0)}
+
+
+def make_t1(seed: int, max_tries: int = 200, gates: bool = True) -> Task:
+    """``gates=False`` reproduces the v0.1 generator (no knowledge gates, shallower water tables)."""
     rng = np.random.default_rng(seed)
     for _ in range(max_tries):
-        site = random_site(rng)
+        if gates:
+            site = random_site(rng, water_prob=1.0, water_depth=(0.0, 0.5))
+        else:
+            site = random_site(rng)
         prof = profile_from_spec(site.spec)
         try:
             res = search_circular(prof, "bishop")
         except InvalidSurface:
             continue
-        if 0.7 <= res.fos <= 2.2:
-            break
+        if not 0.7 <= res.fos <= 2.2:
+            continue
+        if gates:
+            try:
+                g = t1_gates(site.spec, res)
+            except InvalidSurface:
+                continue
+            if g["water"] < WATER_GATE or g["method"] < METHOD_GATE:
+                continue
+        break
     else:
         raise RuntimeError("could not generate a T1 instance")
     instruction = f"""# Slope stability check

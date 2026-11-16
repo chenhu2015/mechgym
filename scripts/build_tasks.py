@@ -21,8 +21,11 @@ from mechgym.tasks import make_t1, make_t2, make_t3
 # Fixed, versioned evaluation suites: the same arguments always produce the same tasks. T0 cycles
 # through its problem types with the seed, so 9 T0 seeds give 3 instances of each of 3 types (6 T0-A
 # seeds: 3 of each of 2 types), and every one of the 9 task types gets 3 instances.
+#
+# eval-v0.1 keeps the T1 generator it was built with (no knowledge gates). Its instances are the
+# same as when the baseline was run; task statements carry later clarifications of the rules.
 SUITES = {
-    "eval-v0.1": dict(t0=9, t0a=6, t0f=3, t1=3, t2=3, t3=3, seed0=0),
+    "eval-v0.1": dict(t0=9, t0a=6, t0f=3, t1=3, t2=3, t3=3, seed0=0, t1_gates=False),
 }
 
 
@@ -37,6 +40,8 @@ def main() -> None:
     ap.add_argument("--t2", type=int, default=5)
     ap.add_argument("--t3", type=int, default=3)
     ap.add_argument("--seed0", type=int, default=0)
+    ap.add_argument("--no-t1-gates", dest="t1_gates", action="store_false",
+                    help="T1 without knowledge gates (the v0.1 generator)")
     ap.add_argument("--out", type=Path, default=Path("build/tasks"))
     args = ap.parse_args()
     if args.suite:
@@ -45,7 +50,7 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     index = []
     makers = ((make_t0, args.t0), (make_t0_aster, args.t0a), (make_t0_foam, args.t0f),
-              (make_t1, args.t1), (make_t2, args.t2), (make_t3, args.t3))
+              (lambda s: make_t1(s, gates=args.t1_gates), args.t1), (make_t2, args.t2), (make_t3, args.t3))
     for maker, n in makers:
         for i in range(n):
             t0 = time.time()

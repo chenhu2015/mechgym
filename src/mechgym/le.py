@@ -207,6 +207,21 @@ def bishop(profile: SlopeProfile, s: Slices, tol: float = 1e-6, max_iter: int = 
     return float(f)
 
 
+def fellenius(profile: SlopeProfile, s: Slices) -> float:
+    """Ordinary method of slices (Fellenius): interslice forces ignored, N' = W cos(alpha) - u l.
+
+    Not an analysis standard of any task; task generators use it to make sure that using it in
+    place of the stated method changes the answer by more than the grading tolerance.
+    """
+    length = s.length
+    n_eff = np.clip(s.w * np.cos(s.alpha) - s.u * length, 0.0, None)
+    c, tphi = _strength_params(profile, s, n_eff / length)
+    driving = np.sum(s.w * np.sin(s.alpha))
+    if driving <= 0:
+        raise InvalidSurface("no driving moment")
+    return float(np.sum(c * length + n_eff * tphi) / driving)
+
+
 def _gle_at_lambda(profile, s, lam, fx_edges, xo, zo, f_start, n_iter=60, tol=1e-7):
     """Return (F_moment, F_force) for interslice shear X = lam * f(x) * E."""
     sa, ca = np.sin(s.alpha), np.cos(s.alpha)
