@@ -17,6 +17,9 @@ costs to run.
 
 All instances are generated procedurally from a seed (`make_tX(seed)`), so the same seed always gives
 the same task. Seed ranges are disjoint across families. A train/test split is a split of seeds.
+Each task type has one hand-written statement template (role, analysis standard, deliverable,
+grading rule). The seed fills in the instance: geometry, soil units, loads, groundwater, and the
+data files and reference answer that go with them.
 
 ## Common properties
 
@@ -404,6 +407,26 @@ drained FoS predicted from those parameters:
 - The laboratory φ' with c' back-calculated (info), a common shortcut: 0.64–1.00, because the
   laboratory φ' is 2–5° too high and the drained prediction suffers on some instances.
 
+**T2 (seeds 0–7; `scripts/method_battery_t2.py`).** Each design is the least excavation that meets
+FoS 1.3 according to the method being tested, with the `fos` that method gives reported as the
+claim. Groundwater is present on seeds 5 and 7.
+
+- Single plane designed with the stated analysis; the same with `fos` from an own 30-slice
+  analysis; the same line with seven times as many collinear vertices: 1.00 on every instance.
+- Designed on a dry analysis although there is groundwater: 0 (re-analyzed FoS 1.22 and 1.28).
+- Designed with the ordinary method of slices: 0.21–0.88, because the design over-excavates and
+  the claimed FoS differs from Bishop's by more than 3%. On 2 of 8 instances no feasible
+  single-plane design exists by that method.
+- A toe berm of fill: 0 (constraint).
+- Phreatic trace kept above the regraded ground instead of the stated lower of the two (info):
+  0.99–1.00.
+- Single plane designed to FoS 1.33 (info): 0.87–0.93. A 2.3% margin costs 7–13% of the reward.
+- **Two-segment face, best of four knee positions (info): 1.00 on every instance, with 1.12–1.70
+  times less excavation than the reference.** The reference (the best single plane) is therefore
+  weak, and because efficiency is capped at 1, a design better than it scores the same as one that
+  only matches it. The uncapped ratio is reported (`efficiency_uncapped`); a stronger reference is
+  planned.
+
 **Knowledge gates in T1 (v0.2).** On the v0.1 generator, ignoring the water table changed the
 minimum FoS by a median of about 2.5%, and using the ordinary method of slices changed it by 1–9%.
 In 24 instances, many were therefore inside the 2% full-credit band, so the method mistakes went
@@ -479,6 +502,10 @@ saturated for this model; the footing, T1 and T2 carry the signal.
 
 ## Known limitations
 
+- Instances of a task type share one statement template, so the 27 tasks of Eval v0.1 are 9 task
+  types with 3 instances each, not 27 independently written tasks. Per-type results are the unit
+  of comparison. The held-out suite hides instances, not task types: the generators are public, so
+  training on the generators themselves would not show up as a gap between the two suites.
 - 2D plane strain only; no 3D effects.
 - T1–T3 use circular slip surfaces as the stated analysis standard; non-circular search exists in the
   library but is too slow for per-episode grading.
