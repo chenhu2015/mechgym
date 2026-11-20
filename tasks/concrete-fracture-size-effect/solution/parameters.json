@@ -1,0 +1,9 @@
+{
+  "_note": "Set A: calibrated on D <= 215 mm only (peak + post-peak misfit on the config meshes); see README.md",
+  "E_MPa": 41240.0,
+  "nu": 0.17,
+  "ft_MPa": 3.85,
+  "Gf_N_per_mm": 0.050,
+  "GF_N_per_mm": 0.071,
+  "knee_over_ft": 0.15
+}

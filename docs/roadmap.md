@@ -150,7 +150,7 @@ task (soft polymers) is the closest relative. This task should complement it, no
 | 1. Foundations | LE verifier and its validation; T0–T3; Harbor packaging; three solvers in containers; two red-team rounds; first baseline | Eval v0.1 with oracle 1.0, do-nothing 0, and a published baseline | done (2026-11-15) |
 | 2. Eval v0.2 | H1 tasks replace the saturated H0 ones; failures from v0.1 fixed in the task statements; a method battery for every task type; T2 scores that can exceed the reference; second model family; human expert baseline on a subset; images pinned by digest; license | No task type above 0.9 mean for the strongest model tested; every failure classified; every battery variant on the expected side | in progress: batteries for all types, T1 knowledge gates and statement fixes, uncapped T2 diagnostics done |
 | 3. Long horizon | T4 staged excavation; first H3 multi-stage project with released monitoring data | Oracle and do-nothing controls; baseline with trajectory review | planned |
-| 4. Research tasks | First H4 tasks: the soil calibration flagship, then verifier construction | As above, plus a check that no task can be solved without running analyses | planned |
+| 4. Research tasks | First H4 tasks: concrete fracture size effect on real data (done), the soil calibration flagship, a fracture task with crack paths not known in advance, then verifier construction | As above, plus a check that no task can be solved without running analyses | in progress: `tasks/concrete-fracture-size-effect` done (oracle 1, method battery, two Claude Opus 5.5 trials both solved it) |
 | 5. Training signal | Small RL run on generated instances; evaluation on the held-out suite | Improvement on held-out tasks that is not explained by reward hacking (checked by trajectory review) | planned |
 
 ## Open questions
@@ -175,3 +175,4 @@ task (soft polymers) is the closest relative. This task should complement it, no
   tasks; the soil-calibration flagship as the first H4 task; uncapped T2 scores; open questions on
   binary rewards and contributing.
 - 2026-11-16: Stage 2 status updated (method batteries for all task types, T1 knowledge gates, uncapped T2 diagnostics). The T2 battery shows the single-plane reference is beaten by 12-70% with a two-segment face, so T2 needs a stronger reference.
+- 2026-11-20: first H4 task, `tasks/concrete-fracture-size-effect`: real three-point-bend data on one concrete batch (D = 40–215 mm given, D = 500 mm withheld), outcome-only grading with the verifier re-running the agent's model, method battery, oracle 1. Two Claude Opus 5.5 trials solved it in 29 and 43 minutes with a self-written cohesive-crack model, so the next fracture task needs crack paths that are not known in advance.

@@ -23,6 +23,7 @@ Datasheet (rewards, validation, negative controls, limits): [`docs/datasheet.md`
 | **T1 stability check** | find the critical circular slip surface and its factor of safety for a described site | re-analyzes the reported surface; scores criticality and whether the claimed FoS matches the surface |
 | **T2 slope design** | regrade an unstable slope (cut only, protected crest road) to reach a target FoS with minimum excavation | checks constraints, re-runs the critical-surface search on the new ground, scores feasibility × excavation efficiency × honesty of the claimed FoS |
 | **T3 back-analysis** | back-calculate the strength mobilized in an observed failure (scarp, toe, inclinometer, piezometers; lab peak strength is a trap) and predict the FoS after drainage | checks fit to the observed failure, location of the predicted critical surface, and the prediction against the hidden true slope |
+| **H4 concrete fracture and size effect** ([`tasks/concrete-fracture-size-effect`](tasks/concrete-fracture-size-effect)) | build a finite element fracture model from real small-beam and companion tests on one concrete, and predict the load–opening curves of withheld beams 2.3 times deeper | re-runs the agent's model: held-out measurements (peak and softening branch), reproduction of the given beams, mesh objectivity; outcome-only, no method prescribed |
 
 Sites are generated procedurally (geometry, 1–3 soil units, phreatic surface, either orientation).
 Grading never uses numbers the agent computed: every answer is re-analyzed with the verifier's own model.
